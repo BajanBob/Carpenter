@@ -28,7 +28,7 @@ Every merge to `main` builds Carpenter (Actions → **Build Carpenter**), each z
 |---|---|
 | `Carpenter-<ver>-windows-portable.zip` | unzip and run `Carpenter.exe` |
 | `Carpenter-<ver>-windows-installer.zip` | the `.msi` installer |
-| `Carpenter-<ver>-linux-deb.zip` | `.deb` for Debian / Ubuntu / Mint: `sudo apt install ./carpenter*.deb` |
+| `Carpenter-<ver>-linux-deb.zip` | `.deb` for Ubuntu 24.04+, Linux Mint 22+, Debian 13+: `sudo apt install ./carpenter*.deb` |
 | `Carpenter-<ver>-android-apk.zip` | the `.apk` - copy to the phone, allow "install unknown apps", open it |
 | `Carpenter-<ver>-all.zip` | all of the above |
 

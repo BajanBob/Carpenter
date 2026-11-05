@@ -67,9 +67,10 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install Briefcase
         run: python -m pip install --upgrade pip briefcase
-      # Built inside Debian 12 (Docker), so the .deb installs on Debian, Ubuntu, Mint and similar.
+      # Built inside Ubuntu 24.04 (Docker): the .deb installs on Ubuntu 24.04+, Linux Mint 22+ and Debian 13+.
+      # (Debian 12 is too old for the current GTK bindings - PyGObject needs girepository-2.0.)
       - name: Build and package (.deb)
-        run: briefcase package linux system --target debian:bookworm --adhoc-sign --no-input --log
+        run: briefcase package linux system --target ubuntu:24.04 --adhoc-sign --no-input --log
       - name: Zip
         run: |
           ver=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
