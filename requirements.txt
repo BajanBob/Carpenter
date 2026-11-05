@@ -1,1 +1,2 @@
 # Python packages Carpenter needs (one per line, with a minimum version, e.g. requests>=2.31)
+# No additional requirements needed for Jsonn encryption
