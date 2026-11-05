@@ -6,7 +6,7 @@ requires = ["briefcase"]
 [tool.briefcase]
 project_name = "Carpenter"
 bundle = "com.bajanbob"
-version = "1.0.1"
+version = "1.0.0"
 url = "https://github.com/BajanBob/Carpenter"
 license.file = "LICENSE"
 author = "BajanBob"
