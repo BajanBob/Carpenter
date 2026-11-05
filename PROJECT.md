@@ -1,11 +1,10 @@
 # Carpenter - project brief
 
-Venice.ai reads this file with every request. Describe here what Carpenter is and the decisions that should
-hold across changes; Venice will keep it up to date as the code grows.
+Its your builder of that I idea stuck in your head
 
 ## What Carpenter is
 
-_(Write a few sentences: what the app does, who uses it, and on what - Windows PC, Linux PC or Android phone.)_
+_(You maybe at the beach or at a bus stop and you can use your phone to instruct Carpenter to supervise Venice.ai and github to execute that project in less than 5 minutes  )_
 
 ## Decisions
 
