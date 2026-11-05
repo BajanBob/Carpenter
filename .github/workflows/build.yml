@@ -7,7 +7,7 @@ name: Build Carpenter
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "tools/**", ".github/workflows/venice-intake.yml"]
+    paths-ignore: ["README.md", "PROJECT.md", "docs/**", "tools/**", ".github/workflows/venice-intake.yml"]
   release:
     types: [published]
   workflow_dispatch:
