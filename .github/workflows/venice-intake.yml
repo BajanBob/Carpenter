@@ -1,0 +1,173 @@
+# Venice code intake: code written by Venice.ai arrives here and becomes a pull request.
+#
+#  Three ways in:
+#   1. Actions -> "Venice code intake" -> Run workflow -> type a TASK (works from a phone):
+#        GitHub runs tools/venice_bridge.py with the VENICE_API_KEY secret; Venice reads the code and writes the change.
+#   2. tools/venice_bridge.py "task" --send   (or tools/venice_send.py) on a computer:
+#        POST /repos/BajanBob/Carpenter/dispatches {"event_type": "venice-code", "client_payload": {...}}
+#   3. Run workflow with a ready-made PAYLOAD (JSON).
+#  Then: files written to branch venice/<name>, checks run (compile + pytest), pull request opened (or updated).
+#
+# Venice never pushes to main and cannot change anything in .github/.
+# Payload format: tools/venice_apply.py.  How to use it: README.md.
+name: Venice code intake
+
+on:
+  repository_dispatch:
+    types: [venice-code]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task for Venice.ai, in plain words (e.g. "Add the PD90 SSTV mode to satrx.py with a test")'
+        required: false
+      payload:
+        description: 'Or: a ready-made payload JSON {"title": "...", "files": [...]}'
+        required: false
+      dry_run:
+        description: 'Test only - open no pull request'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the intake tools
+        run: python tools/test_venice.py
+
+      # Inputs only ever go through files and environment variables, never into a command line.
+      - name: Get the change (from Venice, or as sent)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          INPUT_PAYLOAD: ${{ github.event.inputs.payload }}
+          INPUT_TASK: ${{ github.event.inputs.task }}
+          INPUT_DRY: ${{ github.event.inputs.dry_run }}
+          VENICE_API_KEY: ${{ secrets.VENICE_API_KEY }}
+          VENICE_MODEL: ${{ vars.VENICE_MODEL }}
+        run: |
+          P="$RUNNER_TEMP/payload.json"
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            printf '%s' "$DISPATCH_PAYLOAD" > "$P"
+          elif [ -n "$INPUT_TASK" ]; then
+            if [ -z "$VENICE_API_KEY" ]; then
+              echo "::error title=No Venice key::Add the VENICE_API_KEY secret (Settings > Secrets and variables > Actions) - see README.md"
+              exit 1
+            fi
+            printf '%s' "$INPUT_TASK" > "$RUNNER_TEMP/task.txt"
+            python tools/venice_bridge.py "@$RUNNER_TEMP/task.txt" --root . --out "$P"
+          elif [ -n "$INPUT_PAYLOAD" ]; then
+            printf '%s' "$INPUT_PAYLOAD" > "$P"
+          else
+            echo "::error title=Nothing to do::Give a task or a payload."
+            exit 1
+          fi
+          if [ "$INPUT_DRY" = "true" ]; then
+            python -c "import json,sys; p=json.load(open(sys.argv[1])); p['dry_run']=True; json.dump(p, open(sys.argv[1],'w'))" "$P"
+          fi
+
+      - name: Plan
+        id: plan
+        run: |
+          python tools/venice_apply.py plan "$RUNNER_TEMP/payload.json" > "$RUNNER_TEMP/plan.json"
+          python - "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP" >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, sys
+          p = json.load(open(sys.argv[1]))
+          tmp = sys.argv[2]
+          open(f"{tmp}/title.txt", "w").write(p["title"])
+          open(f"{tmp}/message.txt", "w").write(p["message"] + "\n\nSent-by: Venice.ai via venice-intake\n")
+          open(f"{tmp}/body.txt", "w").write(p["body"])
+          print(f"branch={p['branch']}")
+          print(f"dry_run={'true' if p['dry_run'] else 'false'}")
+          EOF
+
+      - name: Start from the branch (or a new one from main)
+        env:
+          BRANCH: ${{ steps.plan.outputs.branch }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            git fetch origin "$BRANCH"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+          fi
+
+      - name: Apply Venice's change
+        run: python tools/venice_apply.py apply "$RUNNER_TEMP/payload.json" --root . --summary "$RUNNER_TEMP/changes.md"
+
+      # The checks: requirements install, every Python file compiles, the tests pass.
+      - name: Checks
+        id: test
+        run: |
+          # each step exits on failure explicitly ('set -e' does not apply inside an && / || list)
+          (
+            pip install -q pytest || exit 1
+            if [ -f requirements.txt ]; then pip install -q -r requirements.txt || exit 1; fi
+            echo "== compile"; python -m compileall -q -x '/\.' . || exit 1
+            if ls tests/test_*.py >/dev/null 2>&1 || ls test_*.py >/dev/null 2>&1; then
+              echo "== pytest"; python -m pytest -q || exit 1
+            else
+              echo "== no tests yet (tests/test_*.py)"
+            fi
+          ) > "$RUNNER_TEMP/test.log" 2>&1 && ok=true || ok=false
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          tail -n 40 "$RUNNER_TEMP/test.log"
+
+      - name: Commit, push and open the pull request
+        if: steps.plan.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.plan.outputs.branch }}
+          TEST_OK: ${{ steps.test.outputs.ok }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git config user.name "Venice.ai (via venice-intake)"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes - the files already match $BRANCH."
+            exit 0
+          fi
+          git commit -q -F "$RUNNER_TEMP/message.txt"
+          git push -q origin "$BRANCH"
+          {
+            cat "$RUNNER_TEMP/body.txt"; echo
+            echo "### Files"; cat "$RUNNER_TEMP/changes.md"; echo
+            if [ "$TEST_OK" = "true" ]; then echo "### Checks: passed ✅"; else echo "### Checks: FAILED ❌"; fi
+            echo '```'; tail -n 40 "$RUNNER_TEMP/test.log"; echo '```'
+            echo "[Intake run]($RUN_URL) · written by Venice.ai. Review before merging."
+          } > "$RUNNER_TEMP/pr.md"
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr comment "$BRANCH" --body-file "$RUNNER_TEMP/pr.md"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$(cat "$RUNNER_TEMP/title.txt")" \
+              --body-file "$RUNNER_TEMP/pr.md" $( [ "$TEST_OK" = "true" ] || echo --draft )
+          fi
+
+      - name: Dry run result
+        if: steps.plan.outputs.dry_run == 'true'
+        env:
+          TEST_OK: ${{ steps.test.outputs.ok }}
+        run: |
+          echo "Dry run - nothing pushed. Checks ok: $TEST_OK"
+          cat "$RUNNER_TEMP/changes.md"
+
+      - name: Fail the run if the checks failed
+        if: steps.test.outputs.ok != 'true'
+        run: |
+          echo "::error title=Checks failed::Venice's change does not compile or fails its tests - see the pull request (opened as a draft)."
+          exit 1
