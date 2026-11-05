@@ -63,6 +63,7 @@ Rules:
 - Python 3.12. Prefer the standard library; avoid packages with compiled code unless they are known to
   build for Android with Briefcase.
 - Keep PROJECT.md up to date when you make a design decision others need to know.
+- Add a line to CHANGELOG.md for each user-visible change (under the current version).
 - Never touch .github/ or tools/ (the pipeline itself), and never put keys, tokens or passwords in code -
   read them from environment variables.
 - The checks: every Python file must compile, and `python -m pytest` must pass.
