@@ -1,0 +1,155 @@
+# Builds Carpenter for Windows, Linux and Android, and zips each one.
+#  - Every push to main (e.g. when you merge a Venice pull request): download the zips from the run's "Artifacts".
+#  - Publish a Release (Releases -> Draft a new release, tag like v0.2.0): the zips are attached to it.
+#  - Actions -> "Build Carpenter" -> Run workflow: build on demand (optionally attach to a release tag).
+name: Build Carpenter
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "tools/**", ".github/workflows/venice-intake.yml"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Attach the zips to this release tag (e.g. v0.2.0); blank = build only'
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Briefcase
+        run: python -m pip install --upgrade pip briefcase
+      - name: Build and package (MSI installer)
+        run: briefcase package windows --adhoc-sign --no-input --log
+      - name: Zip (installer + portable app)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path pyproject.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force out | Out-Null
+          $exe = Get-ChildItem -Path build -Recurse -Filter "Carpenter.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Carpenter.exe not found under build/" }
+          Compress-Archive -Path "$($exe.Directory.FullName)\*" -DestinationPath "out\Carpenter-$ver-windows-portable.zip" -Force
+          Compress-Archive -Path dist\*.msi -DestinationPath "out\Carpenter-$ver-windows-installer.zip" -Force
+          Get-ChildItem out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Carpenter-windows
+          path: out/*.zip
+      - name: Keep the Briefcase log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefcase-log-windows
+          path: logs/
+          if-no-files-found: ignore
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Briefcase
+        run: python -m pip install --upgrade pip briefcase
+      # Built inside Debian 12 (Docker), so the .deb installs on Debian, Ubuntu, Mint and similar.
+      - name: Build and package (.deb)
+        run: briefcase package linux system --target debian:bookworm --adhoc-sign --no-input --log
+      - name: Zip
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          mkdir -p out
+          ls -la dist
+          (cd dist && zip -9 "../out/Carpenter-$ver-linux-deb.zip" *.deb)
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Carpenter-linux
+          path: out/*.zip
+      - name: Keep the Briefcase log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefcase-log-linux
+          path: logs/
+          if-no-files-found: ignore
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Briefcase
+        run: python -m pip install --upgrade pip briefcase
+      # debug-apk: signed with a debug key, so it installs straight onto a phone (allow "unknown apps").
+      - name: Build and package (APK)
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          briefcase package android -p debug-apk --no-input --log
+      - name: Zip
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          mkdir -p out
+          ls -la dist
+          (cd dist && zip -9 "../out/Carpenter-$ver-android-apk.zip" *.apk)
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Carpenter-android
+          path: out/*.zip
+      - name: Keep the Briefcase log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefcase-log-android
+          path: logs/
+          if-no-files-found: ignore
+
+  # One zip with everything that built; attached to the release when there is one.
+  bundle:
+    needs: [windows, linux, android]
+    if: always() && (needs.windows.result == 'success' || needs.linux.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Carpenter-*
+          path: parts
+          merge-multiple: true
+      - name: Zip everything
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          ls -la parts
+          mkdir -p out
+          cp parts/*.zip out/
+          (cd parts && zip -0 "../out/Carpenter-$ver-all.zip" *.zip)
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Carpenter-all
+          path: out/Carpenter-*-all.zip
+      - name: Attach to the release
+        if: github.event_name == 'release' || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
+          files: out/*.zip

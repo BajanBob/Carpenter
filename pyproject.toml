@@ -1,0 +1,43 @@
+# Carpenter - BeeWare project: one code base -> Windows, Linux and Android.
+# Built by .github/workflows/build.yml with Briefcase (https://briefcase.beeware.org).
+[build-system]
+requires = ["briefcase"]
+
+[tool.briefcase]
+project_name = "Carpenter"
+bundle = "com.bajanbob"
+version = "0.1.0"
+url = "https://github.com/BajanBob/Carpenter"
+license.file = "LICENSE"
+author = "BajanBob"
+author_email = "bajanbob@users.noreply.github.com"
+
+[tool.briefcase.app.carpenter]
+formal_name = "Carpenter"
+description = "Carpenter - built by Venice.ai from plain-language requests"
+long_description = """Carpenter is built by Venice.ai from plain-language requests; see PROJECT.md."""
+sources = ["carpenter"]
+test_sources = ["tests"]
+requires = []
+test_requires = ["pytest"]
+
+[tool.briefcase.app.carpenter.linux]
+requires = ["toga-gtk>=0.5.0"]
+
+[tool.briefcase.app.carpenter.linux.system.debian]
+system_requires = ["libcairo2-dev", "libgirepository1.0-dev"]
+system_runtime_requires = ["gir1.2-gtk-3.0", "libgirepository-1.0-1", "libcanberra-gtk3-module"]
+
+[tool.briefcase.app.carpenter.linux.system.ubuntu]
+system_requires = ["libcairo2-dev", "libgirepository-2.0-dev"]
+system_runtime_requires = ["gir1.2-gtk-3.0", "libgirepository-2.0-0", "libcanberra-gtk3-module"]
+
+[tool.briefcase.app.carpenter.windows]
+requires = ["toga-winforms>=0.5.0"]
+
+[tool.briefcase.app.carpenter.android]
+requires = ["toga-android>=0.5.0"]
+base_theme = "Theme.MaterialComponents.Light.DarkActionBar"
+build_gradle_dependencies = [
+    "com.google.android.material:material:1.12.0",
+]

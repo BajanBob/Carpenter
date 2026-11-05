@@ -20,6 +20,22 @@ is checked automatically and merged only when you approve it.
  you review → Merge
 ```
 
+## Downloads: Windows, Linux, Android
+
+Every merge to `main` builds Carpenter (Actions → **Build Carpenter**), each zipped:
+
+| zip | what's inside |
+|---|---|
+| `Carpenter-<ver>-windows-portable.zip` | unzip and run `Carpenter.exe` |
+| `Carpenter-<ver>-windows-installer.zip` | the `.msi` installer |
+| `Carpenter-<ver>-linux-deb.zip` | `.deb` for Debian / Ubuntu / Mint: `sudo apt install ./carpenter*.deb` |
+| `Carpenter-<ver>-android-apk.zip` | the `.apk` - copy to the phone, allow "install unknown apps", open it |
+| `Carpenter-<ver>-all.zip` | all of the above |
+
+They are under the build run's **Artifacts**. To publish them: **Releases → Draft a new release**, tag e.g.
+`v0.2.0` (match `version` in `pyproject.toml`) → Publish; the zips are attached automatically.
+The builds are unsigned, so Windows SmartScreen may ask "Run anyway" the first time.
+
 ## Making a request
 
 1. Open **Actions → Venice code intake → Run workflow** (works on a phone).
@@ -62,8 +78,9 @@ python tools/venice_send.py --title "..." file1.py file2.py   send files you sav
 
 | path | what |
 |---|---|
-| `carpenter/` | the application (Python package) |
+| `carpenter/` | the application: `app.py` = the screens (Toga), other modules = the logic |
+| `pyproject.toml` | app name, version and packaging (Briefcase) |
 | `tests/` | tests (pytest) - run by the checks on every change |
 | `PROJECT.md` | the brief: what Carpenter is, decisions made - Venice reads it every time |
 | `requirements.txt` | Python packages Carpenter needs |
-| `tools/`, `.github/` | the pipeline - changed only by a person |
+| `tools/`, `.github/` | the pipeline and the builds - changed only by a person |

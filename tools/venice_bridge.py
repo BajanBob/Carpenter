@@ -48,13 +48,20 @@ A person reviews every change as a pull request; the checks below run on it firs
 Rules:
 - Read every existing file you change with read_file before changing it. Never guess at code you have not read.
 - Make the smallest change that does the task well; keep the existing structure, names and style.
-- Put the application code in the carpenter/ package, and tests in tests/ (pytest, files named test_*.py).
+- Carpenter is a BeeWare app: the screens use Toga (carpenter/app.py) and it is packaged with Briefcase
+  (pyproject.toml) for Windows, Linux and Android. Keep all logic in plain modules in the carpenter/ package
+  that do NOT import toga, so they can be tested; app.py only builds the screens and calls that logic.
+  Use only Toga widgets that work on Windows, Linux (GTK) and Android.
+- Tests go in tests/ (pytest, files named test_*.py) and must not import toga or carpenter.app.
   Every behaviour you add or change gets a test.
+- A Python package the app needs at run time goes in pyproject.toml under
+  [tool.briefcase.app.carpenter] requires (it must also work on Android); add it to requirements.txt too
+  so the tests can use it.
 - For existing files larger than about 300 lines use "edits": each "find" must be copied EXACTLY from the
   file (including indentation) and appear in it exactly once - include a few surrounding lines to make it
   unique. For new or small files send the whole "content".
-- Python 3.10 or newer. Prefer the standard library; when a package is really needed, add it (with a
-  minimum version) to requirements.txt.
+- Python 3.12. Prefer the standard library; avoid packages with compiled code unless they are known to
+  build for Android with Briefcase.
 - Keep PROJECT.md up to date when you make a design decision others need to know.
 - Never touch .github/ or tools/ (the pipeline itself), and never put keys, tokens or passwords in code -
   read them from environment variables.
