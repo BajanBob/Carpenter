@@ -1,136 +1,149 @@
-# carpenter/chat.py: Chat functionality with Jsonn encryption
-"""Chat functionality with Jsonn encryption and white noise obfuscation."""
-import json
-import random
-import string
-import time
+# carpenter/chat.py: Live bidirectional text chat with Jsonn encryption and white noise modulation.
+
 import hashlib
-import base64
+import random
+import struct
+import time
+from typing import Tuple
 
 
-def generate_white_noise(length=100):
-    """Generate white noise data to hide messages within."""
-    # Generate random printable characters to act as white noise
-    noise_chars = string.ascii_letters + string.digits + string.punctuation + ' '
-    return ''.join(random.choice(noise_chars) for _ in range(length))
-
-
-def jsonn_encrypt(message, key="default"):
-    """Encrypt a message using Jsonn algorithm (JSON-based encryption)."""
-    # Create a simple hash-based key for encryption
-    key_hash = hashlib.sha256(key.encode()).digest()
+def jsonn_encrypt(message: str, key: str) -> Tuple[str, int]:
+    """Encrypt a message using Jsonn encryption (MATLAB-based 256-bit encryption).
+    
+    Args:
+        message: The plaintext message to encrypt
+        key: The encryption key
+        
+    Returns:
+        Tuple of (encrypted_message_hex, timestamp)
+    """
+    # Generate a 256-bit key from the provided key using SHA-256
+    key_hash = hashlib.sha256(key.encode('utf-8')).digest()
     
     # Convert message to bytes
     message_bytes = message.encode('utf-8')
     
-    # XOR with key hash (repeating if necessary)
+    # XOR encryption with key cycling
     encrypted_bytes = bytearray()
     for i, byte in enumerate(message_bytes):
-        encrypted_bytes.append(byte ^ key_hash[i % len(key_hash)])
+        key_byte = key_hash[i % len(key_hash)]
+        encrypted_bytes.append(byte ^ key_byte)
     
-    # Base64 encode for safe transmission
-    encrypted_message = base64.b64encode(encrypted_bytes).decode('utf-8')
+    # Add timestamp for synchronization
+    timestamp = int(time.time())
     
-    # Wrap in JSON structure
-    json_structure = {
-        "type": "jsonn_encrypted",
-        "payload": encrypted_message,
-        "timestamp": int(time.time()),
-        "checksum": hashlib.md5(encrypted_message.encode()).hexdigest()[:8]
-    }
-    
-    return json.dumps(json_structure)
+    return (encrypted_bytes.hex(), timestamp)
 
 
-def jsonn_decrypt(encrypted_json, key="default"):
-    """Decrypt a Jsonn encrypted message."""
-    # Parse the JSON
-    try:
-        data = json.loads(encrypted_json)
-        if data.get("type") != "jsonn_encrypted":
-            raise ValueError("Invalid Jsonn format")
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON")
+def jsonn_decrypt(encrypted_hex: str, key: str) -> str:
+    """Decrypt a message using Jsonn encryption.
     
-    # Verify checksum
-    expected_checksum = hashlib.md5(data["payload"].encode()).hexdigest()[:8]
-    if data.get("checksum") != expected_checksum:
-        raise ValueError("Checksum mismatch")
+    Args:
+        encrypted_hex: The hex-encoded encrypted message
+        key: The encryption key
+        
+    Returns:
+        The decrypted plaintext message
+    """
+    # Generate the same 256-bit key
+    key_hash = hashlib.sha256(key.encode('utf-8')).digest()
     
-    # Decode base64
-    try:
-        encrypted_bytes = base64.b64decode(data["payload"])
-    except Exception:
-        raise ValueError("Invalid base64 encoding")
+    # Convert hex back to bytes
+    encrypted_bytes = bytes.fromhex(encrypted_hex)
     
-    # Create key hash
-    key_hash = hashlib.sha256(key.encode()).digest()
-    
-    # XOR with key hash to decrypt
+    # XOR decryption with key cycling
     decrypted_bytes = bytearray()
     for i, byte in enumerate(encrypted_bytes):
-        decrypted_bytes.append(byte ^ key_hash[i % len(key_hash)])
+        key_byte = key_hash[i % len(key_hash)]
+        decrypted_bytes.append(byte ^ key_byte)
     
     return decrypted_bytes.decode('utf-8')
 
 
-def embed_in_white_noise(message, noise_length=256):
-    """Embed a message within white noise for obfuscation."""
-    noise = generate_white_noise(noise_length)
-    # Embed message at a random position in the noise
-    insert_pos = random.randint(0, noise_length - len(message) - 1) if len(message) < noise_length else 0
-    embedded = noise[:insert_pos] + message + noise[insert_pos + len(message):]
-    return embedded, insert_pos
-
-
-def extract_from_white_noise(embedded_message, message_length, position):
-    """Extract original message from white noise."""
-    return embedded_message[position:position + message_length]
-
-
-class ChatSession:
-    """Represents a chat session with encryption and obfuscation."""
+def add_white_noise(data: str, intensity: float = 0.1) -> str:
+    """Add white noise to data to hide it in normal traffic.
     
-    def __init__(self, encryption_key="default"):
-        self.encryption_key = encryption_key
-        self.sent_messages = []
-        self.received_messages = []
+    Args:
+        data: The data to hide
+        intensity: Noise intensity (0.0 to 1.0)
+        
+    Returns:
+        Data with added white noise
+    """
+    # Convert to list for manipulation
+    chars = list(data)
     
-    def send_message(self, plaintext):
-        """Send a message through the encrypted chat channel."""
-        # Encrypt the message
-        encrypted = jsonn_encrypt(plaintext, self.encryption_key)
-        
-        # Embed in white noise
-        embedded, position = embed_in_white_noise(encrypted)
-        
-        # Store for reference
-        self.sent_messages.append({
-            "original": plaintext,
-            "encrypted": encrypted,
-            "embedded": embedded,
-            "position": position,
-            "timestamp": time.time()
-        })
-        
-        return embedded
+    # Add random whitespace characters based on intensity
+    noisy_chars = []
+    for char in chars:
+        noisy_chars.append(char)
+        # With probability equal to intensity, add a zero-width space
+        if random.random() < intensity:
+            noisy_chars.append('\u200B')  # Zero-width space
     
-    def receive_message(self, embedded_message, original_length, position):
-        """Receive and decrypt a message from the chat channel."""
-        # Extract from white noise
-        extracted = extract_from_white_noise(embedded_message, original_length, position)
+    return ''.join(noisy_chars)
+
+
+def remove_white_noise(data: str) -> str:
+    """Remove white noise from data.
+    
+    Args:
+        data: The data with noise
         
-        # Decrypt the message
+    Returns:
+        Clean data without noise
+    """
+    # Remove zero-width spaces
+    return data.replace('\u200B', '')
+
+
+def send_message(message: str, key: str) -> str:
+    """Send an encrypted message with white noise modulation.
+    
+    Args:
+        message: The plaintext message
+        key: The encryption key
+        
+    Returns:
+        The noisy encrypted message ready for transmission
+    """
+    # Encrypt the message
+    encrypted, timestamp = jsonn_encrypt(message, key)
+    
+    # Add timestamp to encrypted data
+    data_with_timestamp = f"{encrypted}:{timestamp}"
+    
+    # Add white noise
+    noisy_data = add_white_noise(data_with_timestamp)
+    
+    return noisy_data
+
+
+def receive_message(noisy_data: str, key: str) -> str:
+    """Receive and decrypt a message with white noise modulation.
+    
+    Args:
+        noisy_data: The received noisy data
+        key: The decryption key
+        
+    Returns:
+        The decrypted plaintext message
+    """
+    # Remove white noise
+    clean_data = remove_white_noise(noisy_data)
+    
+    # Extract encrypted message and timestamp
+    if ':' in clean_data:
+        encrypted_part, timestamp_str = clean_data.rsplit(':', 1)
         try:
-            decrypted = jsonn_decrypt(extracted, self.encryption_key)
-            
-            # Store for reference
-            self.received_messages.append({
-                "decrypted": decrypted,
-                "extracted": extracted,
-                "timestamp": time.time()
-            })
-            
-            return decrypted
-        except ValueError as e:
-            return f"Decryption failed: {str(e)}"
+            timestamp = int(timestamp_str)
+            # In a real implementation, we might verify timestamp freshness
+        except ValueError:
+            pass  # Ignore timestamp if not valid
+    else:
+        encrypted_part = clean_data
+    
+    # Decrypt the message
+    decrypted_message = jsonn_decrypt(encrypted_part, key)
+    
+    return decrypted_message

@@ -20,3 +20,4 @@ _(You maybe at the beach or at a bus stop and you can use your phone to instruct
 
 - Project skeleton, the Venice → GitHub pipeline, and the Windows / Linux / Android builds.
 - A first screen: type a name, press *Say hello*.
+- Added Jsonn encrypted bidirectional chat with white noise modulation.
