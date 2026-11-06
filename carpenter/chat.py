@@ -71,7 +71,13 @@ def jsonn_decrypt(encrypted_json, key="default"):
     for i, byte in enumerate(encrypted_bytes):
         decrypted_bytes.append(byte ^ key_hash[i % len(key_hash)])
 
-    return decrypted_bytes.decode('utf-8')
+    # The bytes are only valid text when the key is right and the data is intact.
+    # Raise a clean ValueError (like the other failure paths) instead of letting
+    # UnicodeDecodeError escape, so callers can handle every bad input the same way.
+    try:
+        return decrypted_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        raise ValueError("Decryption failed (wrong key or corrupted data)")
 
 
 def embed_in_white_noise(message, noise_length=256):
